@@ -1,4 +1,4 @@
-﻿package com.zds.embysync.ui.theme
+package com.zds.embysync.ui.theme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -15,13 +15,14 @@ val LightColorScheme = lightColorScheme(
     primary = AppleRed,
     secondary = SyncBlue,
     tertiary = EmbyGreen,
-    background = Color(0xFFF2F2F7),
+    background = Color(0xFFF8FAFC),
     surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE5E5EA),
+    surfaceVariant = Color(0xFFF1F5F9),
+    surfaceTint = Color.Transparent, // 🌟 禁用 Material 3 表面粉红/泛红染色
     onPrimary = Color.White,
     onBackground = Color(0xFF1C1C1E),
     onSurface = Color(0xFF1C1C1E),
-    onSurfaceVariant = Color(0xFF8E8E93)
+    onSurfaceVariant = Color(0xFF64748B)
 )
 
 val DarkColorScheme = darkColorScheme(
@@ -31,6 +32,7 @@ val DarkColorScheme = darkColorScheme(
     background = DarkBackground,
     surface = DarkSurface,
     surfaceVariant = Color(0xFF2C2C2E),
+    surfaceTint = Color.Transparent, // 🌟 禁用染色
     onPrimary = Color.White,
     onBackground = Color(0xFFFFFFFF),
     onSurface = Color(0xFFFFFFFF),

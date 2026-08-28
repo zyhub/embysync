@@ -76,7 +76,8 @@ fun SyncSettingsDialog(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = Color.White,
-            tonalElevation = 6.dp,
+            tonalElevation = 0.dp,
+            shadowElevation = 10.dp,
             border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
             modifier = Modifier
                 .fillMaxWidth()
@@ -96,8 +97,9 @@ fun SyncSettingsDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = AppleRed.copy(alpha = 0.1f),
-                            border = BorderStroke(1.dp, AppleRed.copy(alpha = 0.25f)),
+                            color = Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            tonalElevation = 0.dp,
                             modifier = Modifier.size(36.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -117,7 +119,8 @@ fun SyncSettingsDialog(
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = EmbyGreen.copy(alpha = 0.12f),
-                                    border = BorderStroke(1.dp, EmbyGreen.copy(alpha = 0.3f))
+                                    border = BorderStroke(1.dp, EmbyGreen.copy(alpha = 0.3f)),
+                                    tonalElevation = 0.dp
                                 ) {
                                     Text(
                                         text = "v${AppUpdateManager.CURRENT_VERSION_NAME}",
@@ -142,11 +145,12 @@ fun SyncSettingsDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // 卡片 1: ☁️ 服务器与账号鉴权 (紧凑两行双列)
+                // 卡片 1: ☁️ 服务器与账号鉴权 (纯白底色 + 浅灰优雅边框)
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF8FAFC),
                     border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    tonalElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -243,11 +247,12 @@ fun SyncSettingsDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 卡片 2: ⚡ 同步策略 (下拉菜单) 与 本地路径
+                // 卡片 2: ⚙️ 同步策略 (下拉菜单) 与 本地路径
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF8FAFC),
                     border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    tonalElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -272,6 +277,7 @@ fun SyncSettingsDialog(
                                         shape = RoundedCornerShape(10.dp),
                                         color = Color.White,
                                         border = BorderStroke(1.dp, if (isDropdownExpanded) AppleRed else Color(0xFFCBD5E1)),
+                                        tonalElevation = 0.dp,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(48.dp)
@@ -286,11 +292,13 @@ fun SyncSettingsDialog(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = AppleRed.copy(alpha = 0.12f),
-                                                    modifier = Modifier.size(20.dp)
+                                                    color = Color(0xFFF1F5F9),
+                                                    border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                                    tonalElevation = 0.dp,
+                                                    modifier = Modifier.size(22.dp)
                                                 ) {
                                                     Box(contentAlignment = Alignment.Center) {
-                                                        Text("$concurrency", color = AppleRed, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                                                        Text("$concurrency", color = Color(0xFF0F172A), fontSize = 11.sp, fontWeight = FontWeight.Black)
                                                     }
                                                 }
                                                 Spacer(modifier = Modifier.width(6.dp))
@@ -327,11 +335,12 @@ fun SyncSettingsDialog(
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Surface(
                                                             shape = RoundedCornerShape(4.dp),
-                                                            color = if (concurrency == opt.count) AppleRed.copy(alpha = 0.15f) else Color(0xFFF1F5F9),
+                                                            color = if (concurrency == opt.count) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                                                            tonalElevation = 0.dp,
                                                             modifier = Modifier.size(18.dp)
                                                         ) {
                                                             Box(contentAlignment = Alignment.Center) {
-                                                                Text("${opt.count}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (concurrency == opt.count) AppleRed else Color(0xFF64748B))
+                                                                Text("${opt.count}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (concurrency == opt.count) Color.White else Color(0xFF64748B))
                                                             }
                                                         }
                                                         Spacer(modifier = Modifier.width(8.dp))
@@ -345,7 +354,8 @@ fun SyncSettingsDialog(
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Surface(
                                                         shape = RoundedCornerShape(4.dp),
-                                                        color = if (concurrency == opt.count) EmbyGreen.copy(alpha = 0.15f) else Color(0xFFF1F5F9)
+                                                        color = if (concurrency == opt.count) EmbyGreen.copy(alpha = 0.15f) else Color(0xFFF1F5F9),
+                                                        tonalElevation = 0.dp
                                                     ) {
                                                         Text(
                                                             text = opt.tag,
@@ -397,6 +407,7 @@ fun SyncSettingsDialog(
                                         shape = RoundedCornerShape(10.dp),
                                         color = Color.White,
                                         border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                        tonalElevation = 0.dp,
                                         modifier = Modifier
                                             .size(48.dp)
                                             .clip(RoundedCornerShape(10.dp))
@@ -414,11 +425,12 @@ fun SyncSettingsDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 卡片 3: 👨‍💻 关于作者与 GitHub 程序更新
+                // 卡片 3: 👨‍💻 关于作者与 GitHub 程序更新 (纯白灰底，无红晕染色)
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = Color(0xFFF8FAFC),
                     border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    tonalElevation = 0.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -431,7 +443,9 @@ fun SyncSettingsDialog(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = AppleRed.copy(alpha = 0.1f),
+                                color = Color(0xFFF1F5F9),
+                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                tonalElevation = 0.dp,
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -470,8 +484,8 @@ fun SyncSettingsDialog(
                             },
                             enabled = !isCheckingUpdate,
                             shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, AppleRed.copy(alpha = 0.4f)),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AppleRed),
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF0F172A)),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             modifier = Modifier.height(30.dp)
                         ) {
@@ -562,13 +576,14 @@ fun SyncSettingsDialog(
         }
     }
 
-    // 🚀 程序更新弹窗 (带平滑进度条与一键覆盖安装闭环)
+    // 🚀 程序更新弹窗 (纯白底色，无粉红染色)
     updateInfoDialog?.let { info ->
         Dialog(onDismissRequest = { if (!isDownloadingUpdate) updateInfoDialog = null }) {
             Surface(
                 shape = RoundedCornerShape(20.dp),
                 color = Color.White,
-                tonalElevation = 6.dp,
+                tonalElevation = 0.dp,
+                shadowElevation = 10.dp,
                 border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -593,7 +608,8 @@ fun SyncSettingsDialog(
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = EmbyGreen.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, EmbyGreen.copy(alpha = 0.3f))
+                            border = BorderStroke(1.dp, EmbyGreen.copy(alpha = 0.3f)),
+                            tonalElevation = 0.dp
                         ) {
                             Text(
                                 text = "GitHub 最新",
@@ -610,6 +626,7 @@ fun SyncSettingsDialog(
                         shape = RoundedCornerShape(12.dp),
                         color = Color(0xFFF8FAFC),
                         border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        tonalElevation = 0.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
@@ -633,8 +650,9 @@ fun SyncSettingsDialog(
                     AnimatedVisibility(visible = isDownloadingUpdate) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = AppleRed.copy(alpha = 0.06f),
-                            border = BorderStroke(1.dp, AppleRed.copy(alpha = 0.2f)),
+                            color = Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                            tonalElevation = 0.dp,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {

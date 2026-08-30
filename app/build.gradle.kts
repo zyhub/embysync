@@ -12,8 +12,8 @@ android {
         applicationId = "com.zds.embysync"
         minSdk = 23
         targetSdk = 34
-        versionCode = 18
-        versionName = "1.1.7"
+        versionCode = 22
+        versionName = "1.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -56,7 +56,7 @@ android {
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.11"
+        kotlinCompilerExtensionVersion = "1.5.10"
     }
 
     packaging {

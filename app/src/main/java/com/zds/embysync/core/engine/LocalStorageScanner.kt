@@ -13,7 +13,7 @@ import java.io.File
 object LocalStorageScanner {
 
     private const val TAG = "LocalStorageScanner"
-    val AUDIO_EXTENSIONS = setOf("mp3", "flac", "wav", "m4a", "aac", "ogg", "dsf", "dff", "ape", "alac", "wma")
+    val AUDIO_EXTENSIONS = setOf("mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "dsf", "dff", "ape", "alac", "wma", "dsd", "m4b")
 
     /**
      * 极速本地音频扫描器：
@@ -40,9 +40,13 @@ object LocalStorageScanner {
                     var album = parentFolder?.name ?: targetDir.name
 
                     // 1. 文件名特征智能提取："周杰伦 - 晴天" 或 "01. 晴天"
-                    val cleanTrackName = rawName.replace(Regex("""^\d{1,3}[\.\-\s_]+"""), "").trim()
+                    val cleanTrackName = rawName.replace(Regex("""^(cd\s*\d+[\s\-_]+|\d{1,2}[\-_]\d{1,3}[\s\.\-_]+|\d{1,3}[\s\.\-_]+|[a-zA-Z]\d{1,2}[\s\.\-_]+)""", RegexOption.IGNORE_CASE), "").trim()
                     if (cleanTrackName.contains(" - ")) {
                         val parts = cleanTrackName.split(" - ", limit = 2)
+                        artist = parts[0].trim()
+                        title = parts[1].trim()
+                    } else if (cleanTrackName.contains(" _ ")) {
+                        val parts = cleanTrackName.split(" _ ", limit = 2)
                         artist = parts[0].trim()
                         title = parts[1].trim()
                     } else if (rawName.contains(" - ")) {

@@ -1,4 +1,4 @@
-﻿package com.zds.embysync.core.update
+package com.zds.embysync.core.update
 
 import android.content.Context
 import android.content.Intent
@@ -31,8 +31,8 @@ data class UpdateInfo(
 object AppUpdateManager {
 
     private const val TAG = "AppUpdateManager"
-    const val CURRENT_VERSION_NAME = "1.1.7"
-    const val CURRENT_VERSION_CODE = 18
+    const val CURRENT_VERSION_NAME = "1.2.1"
+    const val CURRENT_VERSION_CODE = 22
     const val AUTHOR_NAME = "zhou"
     const val AUTHOR_EMAIL = "1390999045@qq.com"
     const val APP_DESCRIPTION = "EMBYsync - 高性能 Emby / Jellyfin 音乐全量同步与曲库看板工具。"

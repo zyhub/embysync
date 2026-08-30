@@ -715,7 +715,10 @@ fun FolderSyncScreen(
                     onClick = {
                         if (!filePath.isNullOrBlank()) {
                             val f = File(filePath)
-                            if (f.exists()) f.delete()
+                            if (f.exists()) {
+                                f.delete()
+                                SyncEngine.notifyMediaDeleted(context, filePath)
+                            }
                         }
                         songPendingDelete = null
                         scope.launch { scanLocalDirectory() }

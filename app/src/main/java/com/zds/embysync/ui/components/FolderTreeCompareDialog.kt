@@ -16,17 +16,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.zds.embysync.core.engine.LocalStorageScanner
+import com.zds.embysync.core.engine.SyncEngine
 import com.zds.embysync.ui.theme.AppleRed
 import com.zds.embysync.ui.theme.EmbyGreen
 import java.io.File
 
 private val GoldenFolderColor = Color(0xFFF2A900)
-private val AudioExtSet = setOf("mp3", "flac", "wav", "m4a", "aac", "ogg", "dsf", "dff", "ape", "alac", "wma")
+private val AudioExtSet = LocalStorageScanner.AUDIO_EXTENSIONS
 
 @Composable
 fun FolderTreeCompareDialog(
@@ -34,6 +37,7 @@ fun FolderTreeCompareDialog(
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val defaultRoot = remember {
         val f = if (initialPath.isNotBlank() && File(initialPath).exists()) {
             File(initialPath)
@@ -60,6 +64,13 @@ fun FolderTreeCompareDialog(
 
     val subFolders: List<File> = dirContent.first
     val audioFiles: List<File> = dirContent.second
+
+    // 递归统计当前目录下的所有有效音频总数 (与底部选择按钮及全盘扫描严格一致)
+    val totalAudiosInCurrentDir = remember(currentDir, refreshTrigger) {
+        try {
+            currentDir.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
+        } catch (_: Exception) { 0 }
+    }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedFolders by remember { mutableStateOf<Set<File>>(emptySet()) }
@@ -99,7 +110,7 @@ fun FolderTreeCompareDialog(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("📁 本地存储目录浏览与选择", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Text(
-                            text = "${currentDir.absolutePath} (含 ${audioFiles.size} 首歌曲)",
+                            text = "${currentDir.absolutePath} (含 ${totalAudiosInCurrentDir} 首歌曲)",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -203,9 +214,9 @@ fun FolderTreeCompareDialog(
 
                         items(subFolders, key = { "folder_${it.absolutePath}" }) { folder: File ->
                             val isSelected = selectedFolders.contains(folder)
-                            val songCountInFolder = remember(folder) {
+                            val songCountInFolder = remember(folder, refreshTrigger) {
                                 try {
-                                    folder.walkTopDown().maxDepth(3).count { it.isFile && it.extension.lowercase() in AudioExtSet }
+                                    folder.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
                                 } catch (_: Exception) { 0 }
                             }
 
@@ -377,7 +388,7 @@ fun FolderTreeCompareDialog(
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AppleRed)
                     ) {
-                        Text("选择此目录 (含 ${audioFiles.size} 首歌曲)")
+                        Text("选择此目录 (含 $totalAudiosInCurrentDir 首歌曲)")
                     }
                 }
             }
@@ -432,10 +443,20 @@ fun FolderTreeCompareDialog(
                 Button(
                     onClick = {
                         selectedFolders.forEach { f ->
-                            if (f.exists()) f.deleteRecursively()
+                            if (f.exists()) {
+                                val audioPaths = try {
+                                    f.walkTopDown().filter { it.isFile }.map { it.absolutePath }.toList()
+                                } catch (_: Exception) { emptyList() }
+                                f.deleteRecursively()
+                                audioPaths.forEach { p -> SyncEngine.notifyMediaDeleted(context, p) }
+                            }
                         }
                         selectedAudios.forEach { f ->
-                            if (f.exists()) f.delete()
+                            if (f.exists()) {
+                                val p = f.absolutePath
+                                f.delete()
+                                SyncEngine.notifyMediaDeleted(context, p)
+                            }
                         }
                         selectedFolders = emptySet()
                         selectedAudios = emptySet()

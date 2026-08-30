@@ -1,6 +1,7 @@
 package com.zds.embysync.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -134,10 +135,15 @@ fun SyncFilterRulesDialog(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "删除",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier
-                                        .size(14.dp)
+                                        .size(15.dp)
                                         .clip(RoundedCornerShape(3.dp))
                                         .background(Color.Gray.copy(alpha = 0.2f))
+                                        .clickable {
+                                            extensionTags = (extensionTags - tag).toMutableList()
+                                        }
+                                        .padding(1.dp)
                                 )
                             }
                         }

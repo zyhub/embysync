@@ -188,6 +188,15 @@ fun SyncMainDashboardScreen(
         }
     }
 
+    // 🌟 当下载引擎完成所有任务时（如从文件夹同步或单曲下载完成），自动重新比对并静默刷新首页数据
+    var prevIsSyncing by remember { mutableStateOf(false) }
+    LaunchedEffect(progressState.isSyncing) {
+        if (prevIsSyncing && !progressState.isSyncing) {
+            performFullScanCompare()
+        }
+        prevIsSyncing = progressState.isSyncing
+    }
+
     val curDiff = fullScanDiffResult
     val unsyncedList = remember(curDiff) {
         curDiff?.allSongs?.filter { it.syncStatus in listOf(SyncStatus.NEED_DOWNLOAD, SyncStatus.DIFF_UPGRADE) } ?: emptyList()
@@ -247,20 +256,13 @@ fun SyncMainDashboardScreen(
 
     val unsyncedFoldersCount = if (serverFolders.isNotEmpty()) (serverFolders.size - fullySyncedFoldersCount - partiallySyncedFoldersCount).coerceAtLeast(0) else 0
 
-    // 统计数据与双端枢纽实时联动计算 (无论暂停或下载中，数据严格对齐一致)
+    // 统计数据与双端枢纽真实数据严格对齐 (杜绝局部队列任务完成后的双重累加与虚假完全同步)
     val totalServerSongs = curDiff?.allSongs?.size ?: if (cachedTotalSongs > 0) cachedTotalSongs else 0
-    val baseSyncedSongs = curDiff?.syncedCount ?: if (localSongs.isNotEmpty()) localSongs.size else cachedSyncedSongs
-    val baseNeedSongs = curDiff?.needDownloadCount ?: cachedNeedSongs
+    val actualLocalCount = localSongs.size
+    val liveSyncedSongs = curDiff?.syncedCount ?: if (localSongs.isNotEmpty()) localSongs.size else cachedSyncedSongs
+    val liveNeedSongs = curDiff?.needDownloadCount ?: if (totalServerSongs > 0) (totalServerSongs - liveSyncedSongs).coerceAtLeast(0) else cachedNeedSongs
     val totalUpgradeSongs = curDiff?.diffUpgradeCount ?: cachedUpgradeSongs
     val totalServerFoldersCount = if (serverFolders.isNotEmpty()) serverFolders.size else cachedServerFolders
-
-    // 🚀 双端枢纽实时响应式数据：待下载数严格对应队列中未完成数量
-    val liveSyncedSongs = (baseSyncedSongs + completedTaskCount).coerceAtMost(if (totalServerSongs > 0) totalServerSongs else Int.MAX_VALUE)
-    val liveNeedSongs = if (totalTaskCount > 0) {
-        (totalTaskCount - completedTaskCount).coerceAtLeast(0)
-    } else {
-        (baseNeedSongs - completedTaskCount).coerceAtLeast(0)
-    }
 
     val overallSyncPercentage = if (totalServerSongs > 0) {
         ((liveSyncedSongs.toFloat() / totalServerSongs.toFloat()) * 100).toInt().coerceIn(0, 100)
@@ -850,9 +852,9 @@ fun SyncMainDashboardScreen(
                                         Icon(Icons.Default.Folder, contentDescription = null, tint = FolderGoldenColor, modifier = Modifier.size(14.dp))
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
+                                val displayLocalCount = if (actualLocalCount > 0) actualLocalCount else liveSyncedSongs
                                 Text(
-                                    text = "${liveSyncedSongs} 首已同步",
+                                    text = "${displayLocalCount} 首已同步",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Black,
                                     color = MaterialTheme.colorScheme.onSurface

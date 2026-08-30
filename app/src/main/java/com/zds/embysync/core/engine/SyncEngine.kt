@@ -1,5 +1,7 @@
 package com.zds.embysync.core.engine
 
+import android.content.Context
+import android.media.MediaScannerConnection
 import android.util.Log
 import com.zds.embysync.core.database.EmbySyncDatabase
 import com.zds.embysync.core.database.entity.SyncLogEntity
@@ -59,6 +61,7 @@ object SyncEngine {
     private var lastTasksEmissionTime = 0L
 
     private var activeJob: Job? = null
+    private var appContext: Context? = null
     private var currentServerConfig: EmbyServerConfig? = null
     private var currentDownloadDir: File? = null
     private var currentDatabase: EmbySyncDatabase? = null
@@ -68,7 +71,7 @@ object SyncEngine {
      * 批量或单曲加入下载同步队列
      */
     fun startBatchSync(
-        context: android.content.Context? = null,
+        context: Context? = null,
         server: EmbyServerConfig,
         songs: List<SyncComparisonSong>,
         downloadDir: File,
@@ -78,6 +81,7 @@ object SyncEngine {
     ) {
         if (songs.isEmpty()) return
 
+        context?.let { appContext = it.applicationContext }
         isPauseRequested = false
         currentServerConfig = server
         currentDownloadDir = downloadDir
@@ -288,9 +292,22 @@ object SyncEngine {
         activeDownloadFiles.remove(task.id)
 
         if (result.isSuccess && tempFile.exists() && tempFile.length() > 0) {
-            // 原子重命名：确保落地文件为 100% 完整音频
+            // 原子重命名：确保落地文件为 100% 完整音频 (带跨介质降级保护)
             if (targetFile.exists()) targetFile.delete()
-            tempFile.renameTo(targetFile)
+            val renameSuccess = tempFile.renameTo(targetFile)
+            if (!renameSuccess) {
+                try {
+                    tempFile.copyTo(targetFile, overwrite = true)
+                    tempFile.delete()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Fallback copyTo targetFile failed", e)
+                }
+            }
+
+            // 🌟 立即通知 Android 系统 MediaScanner 建立媒体库索引 (彻底消除椒盐音乐等第三方播放器扫描延迟)
+            appContext?.let { ctx ->
+                notifyMediaScanner(ctx, targetFile.absolutePath, getAudioMimeType(ext))
+            }
 
             updateTaskStatus(task.id, TaskStatus.COMPLETED)
 
@@ -523,5 +540,58 @@ object SyncEngine {
             taskMap[id] = item.copy(isSelected = selected)
         }
         publishTasksImmediately()
+    }
+
+    /**
+     * 主动通知 Android 系统 MediaScanner 索引新下载/修改的音频文件
+     * 消除第三方播放器（如椒盐音乐、Poweramp等）扫描本地歌曲的延时
+     */
+    fun notifyMediaScanner(context: Context, filePath: String, mimeType: String? = null) {
+        try {
+            val mType = mimeType ?: getAudioMimeType(filePath)
+            MediaScannerConnection.scanFile(
+                context.applicationContext,
+                arrayOf(filePath),
+                if (mType.isNotBlank()) arrayOf(mType) else null
+            ) { path, uri ->
+                Log.i(TAG, "MediaScanner indexed successfully: $path -> $uri")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error notifying MediaScanner for $filePath", e)
+        }
+    }
+
+    /**
+     * 本地删除文件时，通知系统 MediaStore 同步清理脏数据，防止第三方播放器出现失效歌曲
+     */
+    fun notifyMediaDeleted(context: Context, filePath: String) {
+        try {
+            MediaScannerConnection.scanFile(
+                context.applicationContext,
+                arrayOf(filePath),
+                null
+            ) { path, _ ->
+                Log.i(TAG, "MediaScanner clean-up indexed for deleted file: $path")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error notifying MediaScanner delete for $filePath", e)
+        }
+    }
+
+    fun getAudioMimeType(filePathOrExt: String): String {
+        val ext = filePathOrExt.substringAfterLast('.', filePathOrExt).lowercase()
+        return when (ext) {
+            "flac" -> "audio/flac"
+            "mp3" -> "audio/mpeg"
+            "wav" -> "audio/x-wav"
+            "m4a", "aac" -> "audio/mp4"
+            "ogg", "opus" -> "audio/ogg"
+            "ape" -> "audio/x-ape"
+            "dsf" -> "audio/x-dsf"
+            "dff" -> "audio/x-dff"
+            "wma" -> "audio/x-ms-wma"
+            "alac" -> "audio/alac"
+            else -> "audio/*"
+        }
     }
 }

@@ -21,15 +21,19 @@ import coil.compose.SubcomposeAsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.zds.embysync.ui.theme.AppleRed
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 private val LOCAL_COVER_NAMES = listOf("cover.jpg", "cover.png", "folder.jpg", "folder.png", "front.jpg", "front.png")
+private val localFolderCoverCache = ConcurrentHashMap<String, String>()
 
 /**
  * 全局高性能音乐缩略图组件：
  * 1. 针对线上 Emby 服务器 URL 与本地文件智能解析
  * 2. 硬件下采样至 128x128 像素，节省 85% 显存与解码 CPU 开销
- * 3. 内存 + 磁盘多级极速缓存，滑动时零卡顿
+ * 3. 内存 + 磁盘多级极速缓存，滑动时零卡顿（彻底杜绝在 UI 组合主线程执行磁盘同步 I/O）
  */
 @Composable
 fun SongCoverThumbnail(
@@ -41,32 +45,47 @@ fun SongCoverThumbnail(
 ) {
     val context = LocalContext.current
 
-    // 智能解析封面来源 (优先线上 WebP 缩略图，本地优先检查同级 folder/cover 图片，无阻塞)
-    val resolvedModel = remember(coverUrl, localFilePath) {
-        if (!coverUrl.isNullOrBlank()) {
-            coverUrl
-        } else if (!localFilePath.isNullOrBlank()) {
-            try {
-                val f = File(localFilePath)
-                val parent = f.parentFile
-                if (parent != null && parent.exists()) {
-                    var foundCover: File? = null
-                    for (name in LOCAL_COVER_NAMES) {
-                        val testFile = File(parent, name)
-                        if (testFile.exists() && testFile.length() > 1024) {
-                            foundCover = testFile
-                            break
-                        }
-                    }
-                    foundCover?.absolutePath ?: localFilePath
-                } else {
-                    localFilePath
-                }
-            } catch (_: Exception) {
-                localFilePath
+    val initialModel: Any? = remember(coverUrl, localFilePath) {
+        when {
+            !coverUrl.isNullOrBlank() -> coverUrl
+            !localFilePath.isNullOrBlank() -> {
+                val parent = File(localFilePath).parent ?: ""
+                localFolderCoverCache[parent] ?: localFilePath
             }
-        } else {
-            null
+            else -> null
+        }
+    }
+
+    var resolvedModel by remember(coverUrl, localFilePath) { mutableStateOf(initialModel) }
+
+    LaunchedEffect(coverUrl, localFilePath) {
+        if (coverUrl.isNullOrBlank() && !localFilePath.isNullOrBlank()) {
+            val parentFile = File(localFilePath).parentFile
+            val parentPath = parentFile?.absolutePath ?: ""
+            if (parentPath.isNotEmpty()) {
+                val cached = localFolderCoverCache[parentPath]
+                if (cached != null) {
+                    resolvedModel = cached
+                } else {
+                    withContext(Dispatchers.IO) {
+                        var foundCover: String? = null
+                        try {
+                            if (parentFile != null && parentFile.exists() && parentFile.isDirectory) {
+                                for (name in LOCAL_COVER_NAMES) {
+                                    val testFile = File(parentFile, name)
+                                    if (testFile.exists() && testFile.length() > 1024) {
+                                        foundCover = testFile.absolutePath
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                        val finalCover = foundCover ?: localFilePath
+                        localFolderCoverCache[parentPath] = finalCover
+                        resolvedModel = finalCover
+                    }
+                }
+            }
         }
     }
 

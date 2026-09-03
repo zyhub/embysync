@@ -10,8 +10,8 @@ import com.zds.embysync.core.model.SyncStatus
  */
 object SongMatchingResolver {
 
-    // 预编译全局静态正则，避免数千次循环中的重复编译开销
-    private val REGEX_TRACK_PREFIX = Regex("""^(cd\s*\d+[\s\-_]+|\d{1,2}[\-_]\d{1,3}[\s\.\-_]+|\d{1,3}[\s\.\-_]+|[a-zA-Z]\d{1,2}[\s\.\-_]+)""", RegexOption.IGNORE_CASE)
+    // 预编译全局静态正则，避免数千次循环中的重复编译开销（支持匹配 CD1-01、Disc 1 - 02. 等复合音轨与碟号前缀）
+    private val REGEX_TRACK_PREFIX = Regex("""^(?:cd\s*\d+[\s\-_]+|disc\s*\d+[\s\-_]+|\d{1,2}[\-_]\d{1,3}[\s\.\-_]+|\d{1,3}[\s\.\-_]+|[a-zA-Z]\d{1,2}[\s\.\-_]+)+""", RegexOption.IGNORE_CASE)
     private val REGEX_BRACKETS = Regex("""[\(\[\{（【［〔《][^\)\]\}）】］〕》]*[\)\]\}）】］〕》]""")
     private val REGEX_AUDIO_EXT = Regex("""\.(mp3|flac|wav|m4a|aac|ogg|opus|ape|dsd|dsf|dff|wma|alac|m4b)$""", RegexOption.IGNORE_CASE)
     private val REGEX_NON_ALPHANUM_CJK = Regex("""[^a-z0-9\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]""")

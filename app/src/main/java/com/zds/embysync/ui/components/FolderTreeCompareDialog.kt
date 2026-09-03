@@ -26,6 +26,8 @@ import com.zds.embysync.core.engine.LocalStorageScanner
 import com.zds.embysync.core.engine.SyncEngine
 import com.zds.embysync.ui.theme.AppleRed
 import com.zds.embysync.ui.theme.EmbyGreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 private val GoldenFolderColor = Color(0xFFF2A900)
@@ -65,11 +67,26 @@ fun FolderTreeCompareDialog(
     val subFolders: List<File> = dirContent.first
     val audioFiles: List<File> = dirContent.second
 
-    // 递归统计当前目录下的所有有效音频总数 (与底部选择按钮及全盘扫描严格一致)
-    val totalAudiosInCurrentDir = remember(currentDir, refreshTrigger) {
-        try {
-            currentDir.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
-        } catch (_: Exception) { 0 }
+    // 异步递归统计音频数（在后台 IO 协程中计算，彻底杜绝阻塞 UI 组合主线程）
+    var totalAudiosInCurrentDir by remember { mutableStateOf(0) }
+    var folderSongCountMap by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+
+    LaunchedEffect(currentDir, refreshTrigger, subFolders) {
+        withContext(Dispatchers.IO) {
+            val total = try {
+                currentDir.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
+            } catch (_: Exception) { 0 }
+            totalAudiosInCurrentDir = total
+
+            val countMap = HashMap<String, Int>(subFolders.size)
+            for (f in subFolders) {
+                val c = try {
+                    f.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
+                } catch (_: Exception) { 0 }
+                countMap[f.absolutePath] = c
+            }
+            folderSongCountMap = countMap
+        }
     }
 
     var isSelectionMode by remember { mutableStateOf(false) }
@@ -214,11 +231,7 @@ fun FolderTreeCompareDialog(
 
                         items(subFolders, key = { "folder_${it.absolutePath}" }) { folder: File ->
                             val isSelected = selectedFolders.contains(folder)
-                            val songCountInFolder = remember(folder, refreshTrigger) {
-                                try {
-                                    folder.walkTopDown().maxDepth(12).count { it.isFile && it.extension.lowercase() in AudioExtSet && it.length() > 5 * 1024 }
-                                } catch (_: Exception) { 0 }
-                            }
+                            val songCountInFolder = folderSongCountMap[folder.absolutePath] ?: 0
 
                             Surface(
                                 shape = RoundedCornerShape(10.dp),

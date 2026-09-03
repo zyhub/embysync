@@ -7,10 +7,9 @@ import com.zds.embysync.core.database.EmbySyncDatabase
 import com.zds.embysync.core.database.entity.SyncLogEntity
 import com.zds.embysync.core.model.*
 import com.zds.embysync.core.network.EmbySyncProtocol
+import com.zds.embysync.core.service.SyncDownloadService
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -47,6 +46,10 @@ object SyncEngine {
     // 所有下载任务列表流 (用于下载弹窗)
     private val _tasksFlow = MutableStateFlow<List<DownloadTaskItem>>(emptyList())
     val tasksFlow: StateFlow<List<DownloadTaskItem>> = _tasksFlow.asStateFlow()
+
+    // 🌟 单曲完成实时事件流（供首页仪表盘、文件夹等界面实现秒级无感递增递变）
+    private val _songCompletedFlow = MutableSharedFlow<SyncComparisonSong>(extraBufferCapacity = 128)
+    val songCompletedFlow: SharedFlow<SyncComparisonSong> = _songCompletedFlow.asSharedFlow()
 
     // 内部常数级索引表 (用于 2000+ 超大队列极速无卡顿查询与更新)
     private val taskMap = ConcurrentHashMap<String, DownloadTaskItem>()
@@ -125,6 +128,7 @@ object SyncEngine {
             _folderProgressMap.value = _folderProgressMap.value + (folderId to FolderSyncProgress(folderId, 0, totalInFolder, 0f))
         }
 
+        appContext?.let { SyncDownloadService.start(it) }
         startProcessingQueue()
     }
 
@@ -164,6 +168,16 @@ object SyncEngine {
                     if (cur?.status != TaskStatus.QUEUED) continue
 
                     semaphore.acquire()
+                    if (!isActive || isPauseRequested) {
+                        semaphore.release()
+                        break
+                    }
+                    val curAfterAcquire = taskMap[task.id]
+                    if (curAfterAcquire?.status != TaskStatus.QUEUED) {
+                        semaphore.release()
+                        continue
+                    }
+
                     launch {
                         try {
                             executeSingleDownload(task)
@@ -196,6 +210,8 @@ object SyncEngine {
                 sessionDownloadedBytes = sessDownloaded,
                 sessionTotalBytes = sessTotal
             )
+            appContext?.let { SyncDownloadService.stop(it) }
+            onSongCompleteCallback = {}
         }
     }
 
@@ -354,6 +370,9 @@ object SyncEngine {
                 sessionTotalBytes = sessTotal
             )
 
+            // 发送单曲完成事件
+            _songCompletedFlow.tryEmit(updatedSong)
+
             withContext(Dispatchers.Main) {
                 onSongCompleteCallback?.invoke(updatedSong)
             }
@@ -425,6 +444,7 @@ object SyncEngine {
     // 继续单个任务
     fun resumeTask(taskId: String) {
         updateTaskStatus(taskId, TaskStatus.QUEUED)
+        appContext?.let { SyncDownloadService.start(it) }
         startProcessingQueue()
     }
 
@@ -453,6 +473,7 @@ object SyncEngine {
             _progressFlow.value = _progressFlow.value.copy(isPausing = true, isSyncing = true)
         } else {
             _progressFlow.value = _progressFlow.value.copy(isSyncing = false, isPausing = false, speedBytesPerSec = 0L)
+            appContext?.let { SyncDownloadService.stop(it) }
         }
     }
 
@@ -480,6 +501,7 @@ object SyncEngine {
             sessionDownloadedBytes = sessDownloaded,
             sessionTotalBytes = sessTotal
         )
+        appContext?.let { SyncDownloadService.start(it) }
         startProcessingQueue()
     }
 
@@ -504,6 +526,7 @@ object SyncEngine {
         publishTasksImmediately()
 
         _progressFlow.value = SyncProgressState(isSyncing = false, isPausing = false, totalItems = 0, completedCount = 0, overallProgress = 0f, speedBytesPerSec = 0L)
+        appContext?.let { SyncDownloadService.stop(it) }
     }
 
     // 批量删除

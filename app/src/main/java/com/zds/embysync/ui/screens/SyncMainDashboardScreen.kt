@@ -188,6 +188,65 @@ fun SyncMainDashboardScreen(
         }
     }
 
+    // 🌟 核心修复：监听实时单曲下载完成事件，动态驱动待下载数递减与已同步数实时递增
+    LaunchedEffect(Unit) {
+        SyncEngine.songCompletedFlow.collect { completedSong ->
+            // 1. 本地歌曲集合实时追加/更新 (以内存增量更新替代全量磁盘 IO 重扫)
+            val currentLocals = localSongs.toMutableList()
+            val existingIdx = currentLocals.indexOfFirst {
+                it.id == completedSong.id ||
+                (!it.localFilePath.isNullOrBlank() && it.localFilePath == completedSong.localFilePath) ||
+                (it.title.equals(completedSong.title, ignoreCase = true) && it.artist.equals(completedSong.artist, ignoreCase = true))
+            }
+            if (existingIdx >= 0) {
+                currentLocals[existingIdx] = completedSong
+            } else {
+                currentLocals.add(completedSong)
+            }
+            localSongs = currentLocals
+
+            // 2. 全量比对结果集动态演进 (同步状态原地转为 SYNCED，待下载实时递减，已同步实时递增)
+            fullScanDiffResult?.let { diff ->
+                val updatedAll = diff.allSongs.map { s ->
+                    if (s.id == completedSong.id ||
+                        (s.embyItemId != null && s.embyItemId == completedSong.embyItemId) ||
+                        (s.title.equals(completedSong.title, ignoreCase = true) && s.artist.equals(completedSong.artist, ignoreCase = true))
+                    ) {
+                        completedSong.copy(
+                            localFilePath = completedSong.localFilePath,
+                            localFormat = completedSong.localFormat,
+                            localBitRate = completedSong.localBitRate,
+                            localFileSize = completedSong.localFileSize,
+                            syncStatus = SyncStatus.SYNCED,
+                            diffReason = "本地已同步"
+                        )
+                    } else {
+                        s
+                    }
+                }
+                val newSynced = updatedAll.count { it.syncStatus == SyncStatus.SYNCED }
+                val newNeed = updatedAll.count { it.syncStatus == SyncStatus.NEED_DOWNLOAD }
+                val newUpgrade = updatedAll.count { it.syncStatus == SyncStatus.DIFF_UPGRADE }
+                val newIgnored = updatedAll.count { it.syncStatus == SyncStatus.IGNORED }
+
+                fullScanDiffResult = SongDiffResult(
+                    allSongs = updatedAll,
+                    syncedCount = newSynced,
+                    needDownloadCount = newNeed,
+                    diffUpgradeCount = newUpgrade,
+                    ignoredCount = newIgnored
+                )
+
+                // 同步持久化缓存
+                prefs.edit()
+                    .putInt("cache_synced_songs", newSynced)
+                    .putInt("cache_need_songs", newNeed)
+                    .putInt("cache_upgrade_songs", newUpgrade)
+                    .apply()
+            }
+        }
+    }
+
     // 🌟 当下载引擎完成所有任务时（如从文件夹同步或单曲下载完成），自动重新比对并静默刷新首页数据
     var prevIsSyncing by remember { mutableStateOf(false) }
     LaunchedEffect(progressState.isSyncing) {

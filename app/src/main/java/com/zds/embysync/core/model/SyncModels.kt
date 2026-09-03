@@ -7,14 +7,6 @@ enum class SyncStatus {
     IGNORED         // ⚪ 已忽略 (命中过滤规则)
 }
 
-enum class SyncFilterCategory(val label: String) {
-    ALL("全部"),
-    SYNCED("已下载"),
-    NEED_DOWNLOAD("待下载"),
-    DIFF_UPGRADE("可升级"),
-    IGNORED("已忽略")
-}
-
 data class EmbyServerConfig(
     val id: String = "emby_default",
     val name: String = "我的 Emby 服务器",
@@ -106,13 +98,6 @@ data class SyncLogItem(
     val detailMessage: String = ""
 )
 
-enum class LibraryNavTab(val label: String) {
-    SONGS("歌曲"),
-    FOLDERS("文件夹"),
-    ARTISTS("艺术家"),
-    ALBUMS("专辑")
-}
-
 data class ServerFolderItem(
     val id: String,
     val name: String,
@@ -121,21 +106,6 @@ data class ServerFolderItem(
     val childCount: Int = 0,
     val coverUrl: String? = null,
     val song: SyncComparisonSong? = null
-)
-
-data class UnifiedArtist(
-    val id: String,
-    val name: String,
-    val songCount: Int = 0,
-    val coverUrl: String = ""
-)
-
-data class UnifiedAlbum(
-    val id: String,
-    val name: String,
-    val artist: String = "",
-    val songCount: Int = 0,
-    val coverUrl: String = ""
 )
 
 enum class TaskStatus(val label: String) {

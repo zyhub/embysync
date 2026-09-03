@@ -14,6 +14,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.content.ContextCompat
 import com.zds.embysync.core.database.EmbySyncDatabase
 import com.zds.embysync.ui.screens.FolderSyncScreen
@@ -39,7 +40,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             EMBYsyncTheme {
-                var currentScreen by remember { mutableStateOf(AppScreen.MAIN_DASHBOARD) }
+                var currentScreen by rememberSaveable { mutableStateOf(AppScreen.MAIN_DASHBOARD) }
 
                 BackHandler(enabled = currentScreen != AppScreen.MAIN_DASHBOARD) {
                     currentScreen = AppScreen.MAIN_DASHBOARD

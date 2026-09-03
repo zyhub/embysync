@@ -138,6 +138,24 @@ fun FolderSyncScreen(
         scanLocalDirectory()
     }
 
+    // 🌟 监听单曲完成事件，实时将新下载歌曲并入 localSongs，驱动页面内文件夹比对状态即时变为已同步
+    LaunchedEffect(Unit) {
+        SyncEngine.songCompletedFlow.collect { completedSong ->
+            val currentLocals = localSongs.toMutableList()
+            val existingIdx = currentLocals.indexOfFirst {
+                it.id == completedSong.id ||
+                (!it.localFilePath.isNullOrBlank() && it.localFilePath == completedSong.localFilePath) ||
+                (it.title.equals(completedSong.title, ignoreCase = true) && it.artist.equals(completedSong.artist, ignoreCase = true))
+            }
+            if (existingIdx >= 0) {
+                currentLocals[existingIdx] = completedSong
+            } else {
+                currentLocals.add(completedSong)
+            }
+            localSongs = currentLocals
+        }
+    }
+
     val localSongIndex = remember(localSongs) {
         SongMatchingResolver.buildLocalSongIndex(localSongs)
     }

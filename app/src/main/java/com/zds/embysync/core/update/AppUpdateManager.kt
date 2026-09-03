@@ -9,6 +9,8 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -31,8 +33,8 @@ data class UpdateInfo(
 object AppUpdateManager {
 
     private const val TAG = "AppUpdateManager"
-    const val CURRENT_VERSION_NAME = "1.2.1"
-    const val CURRENT_VERSION_CODE = 22
+    const val CURRENT_VERSION_NAME = "1.2.2"
+    const val CURRENT_VERSION_CODE = 23
     const val AUTHOR_NAME = "zhou"
     const val AUTHOR_EMAIL = "1390999045@qq.com"
     const val APP_DESCRIPTION = "EMBYsync - 高性能 Emby / Jellyfin 音乐全量同步与曲库看板工具。"
@@ -46,22 +48,29 @@ object AppUpdateManager {
         .build()
 
     /**
-     * 检查新版本 (支持 GitHub Releases API)
+     * 检查新版本 (支持 GitHub 官方 Releases API，并在超时或异常时自动无缝降级至多镜像节点)
      */
     suspend fun checkForUpdates(context: Context, customUrlOrRepo: String? = null): Result<UpdateInfo> = withContext(Dispatchers.IO) {
-        try {
-            val targetRepo = customUrlOrRepo?.ifBlank { null } ?: DEFAULT_GITHUB_REPO
+        val targetRepo = customUrlOrRepo?.ifBlank { null } ?: DEFAULT_GITHUB_REPO
+        var lastException: Exception? = null
 
-            if (targetRepo.isNotBlank()) {
-                val apiUrl = if (targetRepo.startsWith("http://") || targetRepo.startsWith("https://")) {
-                    targetRepo
-                } else {
-                    "https://api.github.com/repos/${targetRepo.trim()}/releases/latest"
-                }
+        // 构造候选检查地址：官方 GitHub API 优先，备用国内高速 CDN 镜像 (读取 version.json 静态配置)
+        val apiEndpoints = if (targetRepo.startsWith("http://") || targetRepo.startsWith("https://")) {
+            listOf(targetRepo)
+        } else {
+            listOf(
+                "https://api.github.com/repos/${targetRepo.trim()}/releases/latest",
+                "https://ghfast.top/https://raw.githubusercontent.com/${targetRepo.trim()}/main/version.json",
+                "https://ghproxy.net/https://raw.githubusercontent.com/${targetRepo.trim()}/main/version.json",
+                "https://raw.githubusercontent.com/${targetRepo.trim()}/main/version.json"
+            )
+        }
 
+        for (endpoint in apiEndpoints) {
+            try {
                 val request = Request.Builder()
-                    .url(apiUrl)
-                    .header("Accept", "application/vnd.github.v3+json")
+                    .url(endpoint)
+                    .header("Accept", "application/vnd.github.v3+json, application/json")
                     .header("User-Agent", "EMBYsync-App")
                     .build()
 
@@ -70,6 +79,7 @@ object AppUpdateManager {
                         val body = response.body?.string() ?: ""
                         val json = JSONObject(body)
 
+                        // 模式 1：标准 GitHub Releases API 返回格式
                         if (json.has("tag_name")) {
                             val tagName = json.optString("tag_name", "").trim()
                             val cleanVersion = tagName.trimStart('v', 'V')
@@ -102,24 +112,42 @@ object AppUpdateManager {
                                     isForceUpdate = false
                                 )
                             )
+                        } else if (json.has("versionName")) {
+                            // 模式 2：version.json 静态镜像配置格式
+                            val cleanVersion = json.optString("versionName", "").trim().trimStart('v', 'V')
+                            val vCode = json.optInt("versionCode", CURRENT_VERSION_CODE)
+                            val notes = json.optString("releaseNotes", "性能优化与功能增强")
+                            val dlUrl = json.optString("downloadUrl", "")
+                            val apkSize = json.optLong("apkSizeBytes", 0L)
+
+                            val hasUpdate = isVersionNewer(cleanVersion, CURRENT_VERSION_NAME)
+                            return@withContext Result.success(
+                                UpdateInfo(
+                                    hasUpdate = hasUpdate,
+                                    latestVersion = cleanVersion,
+                                    latestVersionCode = vCode,
+                                    releaseNotes = notes,
+                                    downloadUrl = dlUrl,
+                                    apkSizeBytes = apkSize,
+                                    isForceUpdate = false
+                                )
+                            )
                         }
+                        Unit
+                    } else {
+                        Log.w(TAG, "Endpoint $endpoint returned HTTP ${response.code}")
                     }
                 }
+            } catch (e: Exception) {
+                lastException = e
+                Log.w(TAG, "Failed checking update at $endpoint: ${e.message}")
             }
+        }
 
-            // 默认返回当前版本
-            Result.success(
-                UpdateInfo(
-                    hasUpdate = false,
-                    latestVersion = CURRENT_VERSION_NAME,
-                    latestVersionCode = CURRENT_VERSION_CODE,
-                    releaseNotes = "当前已是最新版本 (v$CURRENT_VERSION_NAME)。\n\n1. 纯白单页极简设置中心\n2. 原始登录密码与显隐切换\n3. 并发下载通道下拉选择框\n4. FileProvider 安全覆盖安装\n5. 作者关于信息与 GitHub 检查更新",
-                    downloadUrl = ""
-                )
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to check update", e)
-            Result.failure(e)
+        if (lastException != null) {
+            Result.failure(lastException)
+        } else {
+            Result.failure(Exception("无法连接更新服务器，请确认网络畅通"))
         }
     }
 
@@ -140,65 +168,94 @@ object AppUpdateManager {
     }
 
     /**
-     * 原子完整性下载 APK 安装包 (写入 .tmp 临时文件并在校验完整后重命名)
+     * 原子完整性下载 APK 安装包 (自动优先国内高可用镜像加速通道，杜绝超时中断)
      */
     suspend fun downloadApk(
         context: Context,
         downloadUrl: String,
         onProgress: (progress: Float, downloadedBytes: Long, totalBytes: Long) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        try {
-            val updateDir = File(context.cacheDir, "updates").apply { if (!exists()) mkdirs() }
-            val finalApkFile = File(updateDir, "EMBYsync_update.apk")
-            val tempApkFile = File(updateDir, "EMBYsync_update.apk.tmp")
+        val updateDir = File(context.cacheDir, "updates").apply { if (!exists()) mkdirs() }
+        val finalApkFile = File(updateDir, "EMBYsync_update.apk")
+        val tempApkFile = File(updateDir, "EMBYsync_update.apk.tmp")
 
-            if (tempApkFile.exists()) tempApkFile.delete()
-            if (finalApkFile.exists()) finalApkFile.delete()
-
-            val request = Request.Builder().url(downloadUrl).build()
-
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw Exception("HTTP ${response.code}: ${response.message}")
-                val body = response.body ?: throw Exception("响应体为空")
-                val totalLength = body.contentLength()
-
-                val inputStream: InputStream = body.byteStream()
-                val outputStream = FileOutputStream(tempApkFile)
-                val buffer = ByteArray(32 * 1024)
-                var bytesRead: Int
-                var totalBytesRead = 0L
-
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    totalBytesRead += bytesRead
-                    val progress = if (totalLength > 0) totalBytesRead.toFloat() / totalLength else 0f
-                    withContext(Dispatchers.Main) {
-                        onProgress(progress, totalBytesRead, totalLength)
-                    }
-                }
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-
-                // 文件完整性校验
-                if (totalLength > 0 && totalBytesRead < totalLength) {
-                    tempApkFile.delete()
-                    throw Exception("下载中断，已下载 $totalBytesRead 字节 / 总共 $totalLength 字节")
-                }
-                if (tempApkFile.length() < 1024 * 1024) { // 小于 1MB 判定为异常
-                    tempApkFile.delete()
-                    throw Exception("下载的安装包大小异常 (${tempApkFile.length()} 字节)")
-                }
-
-                // 原子重命名
-                tempApkFile.renameTo(finalApkFile)
-            }
-
-            Result.success(finalApkFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "Download APK failed", e)
-            Result.failure(e)
+        // 构造候选下载通道 (国内 GitHub 加速镜像优先)
+        val candidateUrls = mutableListOf<String>()
+        if (downloadUrl.startsWith("https://github.com/")) {
+            candidateUrls.add("https://ghfast.top/$downloadUrl")
+            candidateUrls.add("https://ghproxy.net/$downloadUrl")
         }
+        candidateUrls.add(downloadUrl)
+
+        var lastError: Exception? = null
+
+        for (targetUrl in candidateUrls) {
+            try {
+                if (tempApkFile.exists()) tempApkFile.delete()
+                if (finalApkFile.exists()) finalApkFile.delete()
+
+                val request = Request.Builder().url(targetUrl).build()
+
+                httpClient.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) throw Exception("HTTP ${response.code}: ${response.message}")
+                    val body = response.body ?: throw Exception("响应体为空")
+                    val totalLength = body.contentLength()
+                    var totalBytesRead = 0L
+
+                    body.byteStream().use { inputStream ->
+                        FileOutputStream(tempApkFile).use { outputStream ->
+                            val buffer = ByteArray(32 * 1024)
+                            var bytesRead: Int
+                            var lastCallbackTime = 0L
+
+                            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                                currentCoroutineContext().ensureActive()
+                                outputStream.write(buffer, 0, bytesRead)
+                                totalBytesRead += bytesRead
+                                val now = System.currentTimeMillis()
+                                if (now - lastCallbackTime >= 120L || totalBytesRead == totalLength) {
+                                    lastCallbackTime = now
+                                    val progress = if (totalLength > 0) totalBytesRead.toFloat() / totalLength else 0f
+                                    withContext(Dispatchers.Main) {
+                                        onProgress(progress, totalBytesRead, totalLength)
+                                    }
+                                }
+                            }
+                            outputStream.flush()
+                        }
+                    }
+
+                    // 文件完整性校验
+                    if (totalLength > 0 && totalBytesRead < totalLength) {
+                        if (tempApkFile.exists()) tempApkFile.delete()
+                        throw Exception("下载中断，已下载 $totalBytesRead 字节 / 总共 $totalLength 字节")
+                    }
+                    if (tempApkFile.length() < 1024 * 1024) { // 小于 1MB 判定为异常
+                        if (tempApkFile.exists()) tempApkFile.delete()
+                        throw Exception("下载的安装包大小异常 (${tempApkFile.length()} 字节)")
+                    }
+
+                    // 原子重命名与跨介质降级
+                    if (finalApkFile.exists()) finalApkFile.delete()
+                    val renameSuccess = tempApkFile.renameTo(finalApkFile)
+                    if (!renameSuccess) {
+                        tempApkFile.copyTo(finalApkFile, overwrite = true)
+                        tempApkFile.delete()
+                    }
+
+                    if (!finalApkFile.exists() || finalApkFile.length() <= 0L) {
+                        throw Exception("未能成功生成目标安装包文件")
+                    }
+
+                    return@withContext Result.success(finalApkFile)
+                }
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "Downloading APK failed from $targetUrl: ${e.message}, trying next mirror...")
+            }
+        }
+
+        Result.failure(lastError ?: Exception("下载更新安装包失败"))
     }
 
     /**

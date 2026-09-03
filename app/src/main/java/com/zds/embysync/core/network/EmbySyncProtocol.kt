@@ -6,6 +6,8 @@ import com.zds.embysync.core.model.ServerFolderItem
 import com.zds.embysync.core.model.SyncComparisonSong
 import com.zds.embysync.core.model.SyncStatus
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -26,14 +28,15 @@ class EmbySyncProtocol(
 ) {
 
     private val TAG = "EmbySyncProtocol"
+    private val deviceId = "embysync_" + java.lang.Long.toHexString((android.os.Build.MODEL + android.os.Build.PRODUCT).hashCode().toLong() and 0xFFFFFFFFL)
 
     private fun cleanBaseUrl(url: String): String = url.trimEnd('/')
 
     private fun buildAuthHeader(token: String): String {
         return if (token.isNotBlank()) {
-            "MediaBrowser Client=\"ZDSPlayer\", Device=\"Android\", DeviceId=\"zds_android_device_001\", DeviceName=\"Android\", Version=\"1.0.0\", Token=\"$token\""
+            "MediaBrowser Client=\"EMBYsync\", Device=\"Android\", DeviceId=\"$deviceId\", DeviceName=\"${android.os.Build.MODEL}\", Version=\"1.2.2\", Token=\"$token\""
         } else {
-            "MediaBrowser Client=\"ZDSPlayer\", Device=\"Android\", DeviceId=\"zds_android_device_001\", DeviceName=\"Android\", Version=\"1.0.0\""
+            "MediaBrowser Client=\"EMBYsync\", Device=\"Android\", DeviceId=\"$deviceId\", DeviceName=\"${android.os.Build.MODEL}\", Version=\"1.2.2\""
         }
     }
 
@@ -647,6 +650,7 @@ class EmbySyncProtocol(
                                         var bytesRead = 0L
                                         var read: Int
                                         while (input.read(buffer).also { read = it } != -1) {
+                                            currentCoroutineContext().ensureActive()
                                             output.write(buffer, 0, read)
                                             bytesRead += read
                                             onProgress(bytesRead, totalBytes)
@@ -655,8 +659,22 @@ class EmbySyncProtocol(
                                     }
                                 }
                                 if (targetFile.exists()) targetFile.delete()
-                                tempFile.renameTo(targetFile)
-                                return@withContext Result.success(targetFile)
+                                val renameSuccess = tempFile.renameTo(targetFile)
+                                if (!renameSuccess) {
+                                    try {
+                                        tempFile.copyTo(targetFile, overwrite = true)
+                                        tempFile.delete()
+                                    } catch (copyErr: Exception) {
+                                        Log.e(TAG, "Fallback copyTo targetFile failed", copyErr)
+                                        tempFile.delete()
+                                        return@withContext Result.failure(Exception("临时文件重命名/拷贝至目标路径失败: ${copyErr.message}"))
+                                    }
+                                }
+                                if (targetFile.exists() && targetFile.length() > 0L) {
+                                    return@withContext Result.success(targetFile)
+                                } else {
+                                    return@withContext Result.failure(Exception("目标文件未能成功写入磁盘"))
+                                }
                             }
                         } else {
                             lastException = Exception("HTTP ${response.code}")

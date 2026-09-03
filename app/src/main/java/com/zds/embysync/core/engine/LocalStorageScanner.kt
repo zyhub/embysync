@@ -1,8 +1,6 @@
 package com.zds.embysync.core.engine
 
 import android.content.Context
-import android.database.Cursor
-import android.provider.MediaStore
 import android.util.Log
 import com.zds.embysync.core.model.SyncComparisonSong
 import com.zds.embysync.core.model.SyncStatus
@@ -15,12 +13,15 @@ object LocalStorageScanner {
     private const val TAG = "LocalStorageScanner"
     val AUDIO_EXTENSIONS = setOf("mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "dsf", "dff", "ape", "alac", "wma", "dsd", "m4b")
 
+    // 预编译全局静态正则，避免在万首歌曲全量遍历循环中重复编译产生 GC 压力（支持匹配 CD1-01、Disc 1 - 02. 等复合音轨与碟号前缀）
+    private val TRACK_PREFIX_REGEX = Regex("""^(?:cd\s*\d+[\s\-_]+|disc\s*\d+[\s\-_]+|\d{1,2}[\-_]\d{1,3}[\s\.\-_]+|\d{1,3}[\s\.\-_]+|[a-zA-Z]\d{1,2}[\s\.\-_]+)+""", RegexOption.IGNORE_CASE)
+
     /**
      * 极速本地音频扫描器：
      * 1. 深度遍历目标目录下的所有层级文件，直接提取音频文件 (100% 覆盖率，不受 MediaStore 索引延迟影响)
      * 2. 毫秒级多核并行推导艺术家、专辑、相对路径与音质信息
      */
-    suspend fun scanDirectory(context: Context, targetDir: File): List<SyncComparisonSong> = withContext(Dispatchers.IO) {
+    suspend fun scanDirectory(context: Context? = null, targetDir: File): List<SyncComparisonSong> = withContext(Dispatchers.IO) {
         if (!targetDir.exists() || !targetDir.isDirectory) return@withContext emptyList()
         val result = mutableListOf<SyncComparisonSong>()
 
@@ -40,7 +41,7 @@ object LocalStorageScanner {
                     var album = parentFolder?.name ?: targetDir.name
 
                     // 1. 文件名特征智能提取："周杰伦 - 晴天" 或 "01. 晴天"
-                    val cleanTrackName = rawName.replace(Regex("""^(cd\s*\d+[\s\-_]+|\d{1,2}[\-_]\d{1,3}[\s\.\-_]+|\d{1,3}[\s\.\-_]+|[a-zA-Z]\d{1,2}[\s\.\-_]+)""", RegexOption.IGNORE_CASE), "").trim()
+                    val cleanTrackName = rawName.replace(TRACK_PREFIX_REGEX, "").trim()
                     if (cleanTrackName.contains(" - ")) {
                         val parts = cleanTrackName.split(" - ", limit = 2)
                         artist = parts[0].trim()

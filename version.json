@@ -1,0 +1,7 @@
+﻿{
+  "versionName": "1.2.2",
+  "versionCode": 23,
+  "releaseNotes": "1. 核心修复：单曲下载完成后首页仪表盘待下载与已同步数据实时双向递变\n2. 文件夹同步页本地曲目与进度条秒级联动\n3. 深度优化下载原子性与后台保活服务\n4. 优化国内 GitHub Releases 检查更新与极速镜像下载",
+  "downloadUrl": "https://github.com/zyhub/embysync/releases/download/v1.2.2/EMBYsync-v1.2.2-debug.apk",
+  "apkSizeBytes": 19515096
+}
